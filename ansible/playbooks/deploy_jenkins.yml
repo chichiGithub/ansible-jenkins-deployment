@@ -1,0 +1,47 @@
+---
+- name: Launch EC2 instance and install Jenkins
+  hosts: localhost
+  gather_facts: no
+  vars:
+    instance_type: t2.micro
+    key_name: my-key-pair
+    security_group: jenkins_security_group
+    image_id: ami-01f10c2d6bce70d90 # Update with your preferred AMI
+    region: eu-west-2 # Update with your preferred region
+  tasks:
+    - name: Launch EC2 instance
+      amazon.aws.ec2_instance:
+        key_name: "{{ chic_key }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ image_id }}"
+        wait: yes
+        region: "{{ region }}"
+        group: "{{ security_group }}"
+      register: ec2
+
+    - name: Add new instance to host group
+      add_host:
+        hostname: "{{ item.public_ip }}"
+        groupname: launched
+      loop: "{{ ec2.instances }}"
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ item.public_ip }}"
+        port: 22
+        delay: 60
+        timeout: 320
+        state: started
+      loop: "{{ ec2.instances }}"
+
+- name: Configure Jenkins
+  hosts: launched
+  become: yes
+  tasks:
+    - name: Install Java
+      apt:
+        name: openjdk-11-jdk
+        state: present
+    - name: Install Jenkins
+      include_role:
+        name: geerlingguy.jenkins
